@@ -119,7 +119,7 @@ build-linux:
 	  -e GOFLAGS=$(GOFLAGS)                                                            \
 	  -e CGO_ENABLED=0                                                                 \
 	  -e SHELLOPTS=$(SHELLOPTS)                                                        \
-	  $(BASE_REGISTRY)/golang:1.13.9-stretch                                           \
+	  $(BASE_REGISTRY)/golang:1.13-security                                            \
 	    /bin/bash -c 'for target in $(TARGETS); do                                     \
 	      go build -i -v -o $(OUTPUT_DIR)/$${target} -p $(CPUS)                        \
 	        -ldflags "-s -w -X $(ROOT)/pkg/version.VERSION=$(VERSION)                  \
