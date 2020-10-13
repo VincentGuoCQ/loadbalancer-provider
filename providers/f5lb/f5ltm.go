@@ -76,8 +76,8 @@ func NewF5LTMClient(d core.Device, lbnamespace, lbname string) (LBClient, error)
 			continue
 		}
 
-		log.Infof("Trying f5ltm API call:%s, user:%s, vs:%s, irule: %s", d.ManageAddr, d.Auth.User, ltmvs.Name, ltmvs.IRule)
-		vs, err := lbclient.f5.GetVirtualAddress(ltmvs.Name)
+		log.Infof("Trying f5ltm API call:%s, user:%s, vs:%s, irule: %s", d.ManageAddr, d.Auth.User, ltmvs.VirtualServer, ltmvs.IRule)
+		vs, err := lbclient.f5.GetVirtualServer(ltmvs.VirtualServer)
 		if err != nil {
 			return nil, err
 		}
@@ -155,8 +155,9 @@ func (c *f5LTMClient) DeleteLB(lb *lbapi.LoadBalancer) error {
 // EnsureLB...
 func (c *f5LTMClient) EnsureLB(lb *lbapi.LoadBalancer, tcp *v1.ConfigMap) error {
 	if c.l7vs != nil {
-		_, err := c.f5.GetVirtualServer(c.l7vs.Name)
+		_, err := c.f5.GetVirtualServer(c.l7vs.VirtualServer)
 		if err != nil {
+			log.Errorf("Failed to get F5 vs %s, %v", c.l7vs.VirtualServer, err)
 			return err
 		}
 		if err := c.ensureNodeAndPool("l7", lb); err != nil {

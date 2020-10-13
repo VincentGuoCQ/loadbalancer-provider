@@ -175,8 +175,8 @@ type LTMVirtualServer struct {
 	IP string `json:"ip,omitempty"`
 	// IRule
 	IRule string `json:"irule,omitempty"`
-	// Name
-	Name string `json:"name,omitempty"`
+	// virtual server name
+	VirtualServer string `json:"virtualServer,omitempty"`
 	// Type L4/L7
 	Type string `json:"type,omitempty"`
 }
