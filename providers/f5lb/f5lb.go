@@ -581,8 +581,8 @@ func (p *Provider) ensureAllL4DNS(tcpCM *v1.ConfigMap) error {
 		return err
 	}
 
-	_ = p.ensureAllDNS(&old, "l4", false)
-	status := p.ensureAllDNS(&new, "l4", true)
+	_ = p.ensureAllDNS(&old, Layer4, false)
+	status := p.ensureAllDNS(&new, Layer4, true)
 
 	if tcpCM != nil {
 		p.updateConfigMapStatus(tcpCM, status)
@@ -602,7 +602,7 @@ func (p *Provider) ensureAllL7DNS(add bool) error {
 
 	dnsInfos := getIngressDNSRecord(ings)
 
-	status := p.ensureAllDNS(&dnsInfos, "l7", add)
+	status := p.ensureAllDNS(&dnsInfos, Layer7, add)
 
 	if add {
 		for k, m := range status {

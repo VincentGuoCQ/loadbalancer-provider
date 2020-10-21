@@ -12,6 +12,11 @@ import (
 	log "k8s.io/klog"
 )
 
+const (
+	Layer4 = "l4"
+	Layer7 = "l7"
+)
+
 type dnsInfo struct {
 	provider.Record
 	hostName string
@@ -47,7 +52,7 @@ func getOneIngressDNSRecord(ing *v1beta1.Ingress) (dnsInfoList, error) {
 		d := &dnsInfo{
 			hostName: hostName,
 			Record:   dns,
-			l47:      "l7",
+			l47:      Layer7,
 		}
 		d.rules = append(d.rules, fmt.Sprintf("%s.%s", ing.Namespace, ing.Name))
 		ds = append(ds, d)
@@ -103,7 +108,7 @@ func getDNSInfoList(dnsRecords map[string][]provider.Record) dnsInfoList {
 		dnsRecord := drs[0]
 		d := &dnsInfo{
 			Record:   dnsRecord,
-			l47:      "l4",
+			l47:      Layer4,
 			hostName: dnsRecord.Host,
 		}
 		d.rules = append(d.rules, k)
@@ -173,7 +178,7 @@ func unserializeMetadata(info string) (string, *dnsInfo) {
 	}
 	lbname = items[2]
 	/*
-		if items[3] != "l7" && items[3] != "l4" {
+		if items[3] != Layer7 && items[3] != Layer4 {
 			return lbname, nil
 		}
 	*/

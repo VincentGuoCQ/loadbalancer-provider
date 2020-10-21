@@ -58,7 +58,7 @@ func NewF5LTMClient(d core.Device, lbnamespace, lbname string) (LBClient, error)
 	}
 
 	for i, s := range d.Config.LTMVSList {
-		if s.Type == "L4" {
+		if s.Type == Layer4 {
 			lbclient.l4vs = &d.Config.LTMVSList[i]
 		} else {
 			lbclient.l7vs = &d.Config.LTMVSList[i]
@@ -118,14 +118,14 @@ func (c *f5LTMClient) DeleteLB(lb *lbapi.LoadBalancer) error {
 	}
 
 	var poolName string
-	poolName = c.getPoolName("l4")
+	poolName = c.getPoolName(Layer4)
 	log.Infof("f5.DeletePool %s", poolName)
 	err = c.f5.DeletePool(poolName)
 	if err != nil {
 		log.Warningf("Failed to delete pool %s", poolName)
 	}
 
-	poolName = c.getPoolName("l7")
+	poolName = c.getPoolName(Layer7)
 	log.Infof("f5.DeletePool %s", poolName)
 	err = c.f5.DeletePool(poolName)
 	if err != nil {
@@ -160,13 +160,13 @@ func (c *f5LTMClient) EnsureLB(lb *lbapi.LoadBalancer, tcp *v1.ConfigMap) error 
 			log.Errorf("Failed to get F5 vs %s, %v", c.l7vs.VirtualServer, err)
 			return err
 		}
-		if err := c.ensureNodeAndPool("l7", lb); err != nil {
+		if err := c.ensureNodeAndPool(Layer7, lb); err != nil {
 			return err
 		}
 	}
 
 	if c.l4vs != nil {
-		if err := c.ensureNodeAndPool("l4", lb); err != nil {
+		if err := c.ensureNodeAndPool(Layer4, lb); err != nil {
 			return err
 		}
 
@@ -225,7 +225,7 @@ func (c *f5LTMClient) generateL7Rule(ings []*v1beta1.Ingress) string {
 		}
 	*/
 	// update irule content
-	poolName := c.getPoolName("l7")
+	poolName := c.getPoolName(Layer7)
 	newRule := "# written by lb " + c.namePrefix
 	newRule += "\nwhen HTTP_REQUEST {\n"
 	if len(items) > 0 {
@@ -282,7 +282,7 @@ func (c *f5LTMClient) generateL4Rule(l4rules map[string]string) string {
 		}
 	*/
 	// update irule content
-	poolName := c.getPoolName("l4")
+	poolName := c.getPoolName(Layer4)
 	newRule := "# written by lb " + c.namePrefix
 	newRule += "\nwhen CLIENT_ACCEPTED {\n"
 	if len(items) > 0 {
@@ -338,7 +338,7 @@ func (c *f5LTMClient) ensurePool(name, l47 string) error {
 
 	if obj == nil {
 		monitor := "/Common/gateway_icmp"
-		if l47 == "l7" {
+		if l47 == Layer7 {
 			monitor = "/Common/http" // f5 default http monitor
 		}
 		config := &gobigip.Pool{
@@ -407,7 +407,7 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 	}
 
 	poolPort := "0"
-	if l47 == "l7" {
+	if l47 == Layer7 {
 		poolPort = defaultHTTPPort
 	}
 	foundCount := 0

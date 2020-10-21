@@ -79,7 +79,7 @@ func newF5DNSClient(d provider.Device, lbnamespace, lbname string) (DNSClient, e
 func (c *f5DNSClient) EnsureDNSRecords(addList, deleteList *dnsInfoList, l47 string, syncAll bool) error {
 	var err error
 	log.Infof("EnsureDNSRecords %s dl, update:%v, delete:%v", l47, addList, deleteList)
-	if l47 != "l7" {
+	if l47 != Layer7 {
 		return nil
 	}
 
