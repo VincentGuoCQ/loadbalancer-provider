@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	gobigip "github.com/hanxueluo/go-bigip"
 
@@ -41,6 +42,7 @@ when HTTP_REQUEST {
 */
 
 const defaultHTTPPort = "80"
+const F5PartitionCommon = "Common"
 
 type f5LTMClient struct {
 	f5CommonClient
@@ -117,19 +119,25 @@ func (c *f5LTMClient) DeleteLB(lb *lbapi.LoadBalancer) error {
 		}
 	}
 
-	var poolName string
-	poolName = c.getPoolName(Layer4)
-	log.Infof("f5.DeletePool %s", poolName)
-	err = c.f5.DeletePool(poolName)
-	if err != nil {
-		log.Warningf("Failed to delete pool %s", poolName)
+	var poolName, partition string
+	if c.l4vs != nil {
+		poolName = c.getPoolName(Layer4)
+		partition = c.getPartition(Layer4)
+		log.Infof("f5.DeletePool %s in partition %s", poolName, partition)
+		err = c.f5.DeletePool(c.poolNameWithPartition(partition, poolName))
+		if err != nil {
+			log.Warningf("Failed to delete pool %s", poolName)
+		}
 	}
 
-	poolName = c.getPoolName(Layer7)
-	log.Infof("f5.DeletePool %s", poolName)
-	err = c.f5.DeletePool(poolName)
-	if err != nil {
-		log.Warningf("Failed to delete pool %s", poolName)
+	if c.l7vs != nil {
+		poolName = c.getPoolName(Layer7)
+		partition = c.getPartition(Layer7)
+		log.Infof("f5.DeletePool %s in partition %s", poolName, partition)
+		err = c.f5.DeletePool(c.poolNameWithPartition(partition, poolName))
+		if err != nil {
+			log.Warningf("Failed to delete pool %s", poolName)
+		}
 	}
 
 	/* //do not clean node
@@ -315,7 +323,7 @@ func (c *f5LTMClient) ensureIRule(newRule string, iruleName string) error {
 	if obj.Rule != newRule {
 		obj.Rule = newRule
 		log.Infof("f5.ModifyIRule %s:\n%v", iruleName, newRule)
-		if err := c.f5.ModifyIRule(obj.Name, obj); err != nil {
+		if err := c.f5.ModifyIRule(iruleName, obj); err != nil {
 			log.Errorf("Failed to modify irule %s:%v", iruleName, err)
 			return err
 		}
@@ -328,22 +336,28 @@ func (c *f5LTMClient) getPoolName(l47 string) string {
 	return "P_Pool_" + c.namePrefix + l47 + "_pool"
 }
 
-func (c *f5LTMClient) ensurePool(name, l47 string) error {
-	obj, err := c.f5.GetPool(name)
+func (c *f5LTMClient) poolNameWithPartition(partition, name string) string {
+	return "/" + partition + "/" + name
+}
+
+func (c *f5LTMClient) ensurePool(partition, name, l47 string) error {
+	obj, err := c.f5.GetPool(c.poolNameWithPartition(partition, name))
 
 	if err != nil {
 		log.Errorf("Failed to get %s: %v", name, err)
 		return err
 	}
 
-	if obj == nil {
+	if obj == nil || obj.Partition != partition {
+		//TODO: use monitor in the same partition
 		monitor := "/Common/gateway_icmp"
 		if l47 == Layer7 {
 			monitor = "/Common/http" // f5 default http monitor
 		}
 		config := &gobigip.Pool{
-			Name:    name,
-			Monitor: monitor,
+			Name:      name,
+			Monitor:   monitor,
+			Partition: partition,
 		}
 		log.Infof("f5.AddPool %v", config)
 		err = c.f5.AddPool(config)
@@ -353,6 +367,27 @@ func (c *f5LTMClient) ensurePool(name, l47 string) error {
 		}
 	}
 	return nil
+}
+func (c *f5LTMClient) getPartition(l47 string) string {
+	partition := F5PartitionCommon
+	vsPath := ""
+	if l47 == Layer7 {
+		vsPath = c.l7vs.VirtualServer
+	} else {
+		vsPath = c.l4vs.VirtualServer
+	}
+	if len(vsPath) == 0 {
+		return partition
+	}
+
+	sPart := strings.Split(vsPath, "/")
+	if len(sPart) != 3 {
+		return partition
+	}
+
+	partition = sPart[1]
+
+	return partition
 }
 
 func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) error {
@@ -373,10 +408,14 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 		log.Errorf("Failed to list F5 nodes %v", err)
 		return err
 	}
+	partition := c.getPartition(l47)
 
 	for _, f5node := range f5nodes.Nodes {
 		if f5node.Name != f5node.Address {
 			log.Warningf("node name %s != addr %s in f5", f5node.Name, f5node.Address)
+			continue
+		}
+		if f5node.Partition != partition {
 			continue
 		}
 		if _, ok := ips[f5node.Name]; ok {
@@ -388,19 +427,24 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 		if exist {
 			continue
 		}
-		log.Infof("f5.CreateNode %v:%v", ip, exist)
-		err := c.f5.CreateNode(ip, ip)
+		log.Infof("f5.CreateNode %v:%v in partition: %v", ip, exist, partition)
+		node := &gobigip.Node{
+			Name:      ip,
+			Address:   ip,
+			Partition: partition,
+		}
+		err := c.f5.AddNode(node)
 		if err != nil {
 			log.Errorf("Failed to create F5 node %s, %v", ip, err)
 			return err
 		}
 	}
-	err = c.ensurePool(poolName, l47)
+	err = c.ensurePool(partition, poolName, l47)
 	if err != nil {
 		return err
 	}
 
-	poolMembers, err := c.f5.PoolMembers(poolName)
+	poolMembers, err := c.f5.PoolMembers(c.poolNameWithPartition(partition, poolName))
 	if err != nil {
 		log.Errorf("Failed to poolMember for pool %s: %v", poolName, err)
 		return err
@@ -423,7 +467,8 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 			}
 		}
 		pm = &gobigip.PoolMember{
-			Name: memberName,
+			Name:      memberName,
+			Partition: partition,
 		}
 		newPoolMembers = append(newPoolMembers, *pm)
 	}
@@ -434,9 +479,9 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 	}
 
 	log.Infof("f5.UpdatePoolMembers ips: %v, found: %v, newPool: %v", ips, foundCount, newPoolMembers)
-	err = c.f5.UpdatePoolMembers(poolName, &newPoolMembers)
+	err = c.f5.UpdatePoolMembers(c.poolNameWithPartition(partition, poolName), &newPoolMembers)
 	if err != nil {
-		log.Errorf("Failed to update pool member %s: %v", poolName, err)
+		log.Errorf("Failed to update pool member %s in partition %s: %v", poolName, partition, err)
 	}
 	return err
 
