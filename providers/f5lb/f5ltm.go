@@ -123,7 +123,7 @@ func (c *f5LTMClient) DeleteLB(lb *lbapi.LoadBalancer) error {
 	if c.l4vs != nil {
 		poolName = c.getPoolName(Layer4)
 		partition = c.getPartition(Layer4)
-		log.Infof("f5.DeletePool %s in partition %s", poolName, partition)
+		log.Infof("f5.DeletePool /%s/%s", partition, poolName)
 		err = c.f5.DeletePool(c.poolNameWithPartition(partition, poolName))
 		if err != nil {
 			log.Warningf("Failed to delete pool %s", poolName)
@@ -133,7 +133,7 @@ func (c *f5LTMClient) DeleteLB(lb *lbapi.LoadBalancer) error {
 	if c.l7vs != nil {
 		poolName = c.getPoolName(Layer7)
 		partition = c.getPartition(Layer7)
-		log.Infof("f5.DeletePool %s in partition %s", poolName, partition)
+		log.Infof("f5.DeletePool /%s/%s", partition, poolName)
 		err = c.f5.DeletePool(c.poolNameWithPartition(partition, poolName))
 		if err != nil {
 			log.Warningf("Failed to delete pool %s", poolName)
@@ -323,7 +323,7 @@ func (c *f5LTMClient) ensureIRule(newRule string, iruleName string) error {
 	if obj.Rule != newRule {
 		obj.Rule = newRule
 		log.Infof("f5.ModifyIRule %s:\n%v", iruleName, newRule)
-		if err := c.f5.ModifyIRule(iruleName, obj); err != nil {
+		if err := c.f5.ModifyIRule(obj.FullPath, obj); err != nil {
 			log.Errorf("Failed to modify irule %s:%v", iruleName, err)
 			return err
 		}
@@ -349,10 +349,9 @@ func (c *f5LTMClient) ensurePool(partition, name, l47 string) error {
 	}
 
 	if obj == nil || obj.Partition != partition {
-		//TODO: use monitor in the same partition
-		monitor := "/Common/gateway_icmp"
+		monitor := "/" + partition + "/gateway_icmp"
 		if l47 == Layer7 {
-			monitor = "/Common/http" // f5 default http monitor
+			monitor = "/" + partition + "/http" // f5 default http monitor
 		}
 		config := &gobigip.Pool{
 			Name:      name,
@@ -427,7 +426,7 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 		if exist {
 			continue
 		}
-		log.Infof("f5.CreateNode %v:%v in partition: %v", ip, exist, partition)
+		log.Infof("f5.CreateNode /%v/%v: %v", partition, ip, exist)
 		node := &gobigip.Node{
 			Name:      ip,
 			Address:   ip,
@@ -481,7 +480,7 @@ func (c *f5LTMClient) ensureNodeAndPool(l47 string, lb *lbapi.LoadBalancer) erro
 	log.Infof("f5.UpdatePoolMembers ips: %v, found: %v, newPool: %v", ips, foundCount, newPoolMembers)
 	err = c.f5.UpdatePoolMembers(c.poolNameWithPartition(partition, poolName), &newPoolMembers)
 	if err != nil {
-		log.Errorf("Failed to update pool member %s in partition %s: %v", poolName, partition, err)
+		log.Errorf("Failed to update pool member /%s/%s: %v", partition, poolName, err)
 	}
 	return err
 
