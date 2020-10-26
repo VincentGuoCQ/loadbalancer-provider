@@ -94,7 +94,7 @@ func NewIpvsdrProvider(nodeName string) (*Provider, error) {
 		ip6t:              iptables.New(execer, iptables.ProtocolIpv6),
 	}
 
-	err := ipvs.keepalived.loadTemplate()
+	err := ipvs.keepalived.Init()
 	if err != nil {
 		return nil, err
 	}

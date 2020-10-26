@@ -34,6 +34,10 @@ vrrp_instance inst_{{ $inst.Name}} {
   virtual_ipaddress {
     {{ $inst.VIP }}
   }
+
+  notify_master "/etc/keepalived/role.sh master {{ $inst.Name}}"
+  notify_backup "/etc/keepalived/role.sh backup {{ $inst.Name}}"
+  notify_fault  "/etc/keepalived/role.sh fault {{ $inst.Name}}"
 }
 {{ end }}
 
